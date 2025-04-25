@@ -1,0 +1,38 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id       String  @id @default(uuid())
+    fullName String
+    email    String  @unique
+    password String?
+    IOI      IOI[]
+}
+
+model IOI {
+    id                   String @id @default(uuid())
+    fullName             String
+    contact              Int
+    schoolName           String
+    City                 String
+    Grade                Int
+    codeforcesUsername   String
+    codeforcesRating     Int
+    codeChefRating       String
+    participationHistory bool
+    achievements         String
+    participation        bool
+    volunteerInterest    bool
+    email                User   @relation(fields: [id], references: [email])
+}
+
+enum bool {
+    YES
+    NO
+}

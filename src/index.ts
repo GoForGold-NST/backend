@@ -1,9 +1,12 @@
 import Express from "express";
+import { PrismaClient } from "../prisma/generated/client";
+
+export const prisma = new PrismaClient();
 
 const app = Express();
-
 app.use(Express.json());
-app.post("/register", (req, res) => {
+
+app.post("/register", (_, res) => {
   res.send("Hello World!");
 });
 

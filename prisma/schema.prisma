@@ -1,5 +1,6 @@
 generator client {
     provider = "prisma-client-js"
+    output   = "./generated/client"
 }
 
 datasource db {
@@ -17,19 +18,33 @@ model User {
 
 model IOI {
     id                   String @id @default(uuid())
-    fullName             String
-    contact              Int
+    user                 User   @relation(fields: [email], references: [email])
+    email                String
+    candidateContact     Int
+    candidateAdhaar      Int
     schoolName           String
-    City                 String
+    city                 String
     Grade                Int
     codeforcesUsername   String
     codeforcesRating     Int
-    codeChefRating       String
+    codechefUsername     String
+    codechefRating       Int
     participationHistory bool
-    achievements         String
-    participation        bool
+    CPAchievements       String
+    chennaiParticipation bool
     volunteerInterest    bool
-    email                User   @relation(fields: [id], references: [email])
+    campInterest         String
+    guardianName         String
+    guardianContact      Int
+    guardianEmail        String
+    TShirtSize           String
+    allergies            String
+    paymentMade          paymentStatus   @default(pending)
+}
+
+enum paymentStatus {
+    pending
+    success
 }
 
 enum bool {

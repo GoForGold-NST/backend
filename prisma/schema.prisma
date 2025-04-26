@@ -16,38 +16,57 @@ model User {
     IOI      IOI[]
 }
 
+model Admin {
+    id       String  @id @default(uuid())
+    email    String
+    password String
+}
+
 model IOI {
-    id                   String @id @default(uuid())
-    user                 User   @relation(fields: [email], references: [email])
+    id                   String  @id @default(uuid())
+    user                 User?   @relation(fields: [userId], references: [id])
+    userId               String?
     email                String
-    candidateContact     Int
-    candidateAdhaar      Int
+    candidateContact     String
+    candidateAdhaar      String
     schoolName           String
     city                 String
     Grade                Int
-    codeforcesUsername   String
-    codeforcesRating     Int
-    codechefUsername     String
-    codechefRating       Int
-    participationHistory bool
-    CPAchievements       String
-    chennaiParticipation bool
-    volunteerInterest    bool
-    campInterest         String
-    guardianName         String
-    guardianContact      Int
-    guardianEmail        String
-    TShirtSize           String
-    allergies            String
-    paymentMade          paymentStatus   @default(pending)
+    codeforcesUsername   String?
+    codeforcesRating     Int?
+    codechefUsername     String?
+    codechefRating       Int?
+    participationHistory Bool    @default(NO)
+    CPAchievements       String?
+    chennaiParticipation Bool    @default(NO)
+    volunteerInterest    Bool    @default(NO)
+    campInterest         String?
+    guardianName         String?
+    guardianContact      String?
+    guardianEmail        String?
+    TShirtSize          String?
+    allergies           String?
+    paymentMade         PaymentStatus @default(pending)
+    createdAt           DateTime @default(now())
+    updatedAt           DateTime @updatedAt
+
+    EventCheckIn EventCheckIn[]
 }
 
-enum paymentStatus {
+model EventCheckIn {
+    id            String   @id @default(uuid())
+    ioi           IOI      @relation(fields: [ioiId], references: [id])
+    ioiId         String
+    checkedInBy   String
+    createdAt     DateTime @default(now())
+}
+
+enum PaymentStatus {
     pending
     success
 }
 
-enum bool {
+enum Bool {
     YES
     NO
 }

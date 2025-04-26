@@ -1,34 +1,102 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import multer from "multer";
-import csv from "csv-parser";
+import csv from 'csv-parser';
 import fs from "fs";
 import path from "path";
-import QRCode from "qrcode";
-import authenticateAdmin from "./auth/middleware.ts";
-import { PrismaClient } from "@prisma/client";
-import cors from "cors";
+import QRCode from "qrcode"
+import { PrismaClient, IOI, User } from "@prisma/client";
+import cors from 'cors';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
-import { configDotenv } from "dotenv";
+import { config } from "dotenv";
+import { prisma } from './index.ts'
+
+config();
+
+// Define enums that match your Prisma schema
+enum PaymentStatus {
+  pending = "pending",
+  success = "success",
+}
+
+enum Bool {
+  YES = "YES",
+  NO = "NO",
+}
+
+interface AuthenticatedRequest extends Request {
+  admin?: {
+    id: string;
+    email: string;
+  };
+  file?: Express.Multer.File;
+}
+
+interface CSVRow {
+  [key: string]: string;
+}
+
+interface IOIWithUser {
+  id: string;
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+    password: string | null;
+  } | null;
+  userId?: string | null;
+  email: string;
+  candidateContact: string;
+  candidateAdhaar: string;
+  schoolName: string;
+  city: string;
+  Grade: number;
+  codeforcesUsername: string | null;
+  codeforcesRating: number | null;
+  codechefUsername: string | null;
+  codechefRating: number | null;
+  participationHistory: boolean;
+  CPAchievements: string | null;
+  chennaiParticipation: boolean;
+  volunteerInterest: boolean;
+  campInterest: string | null;
+  guardianName: string | null;
+  guardianContact: string | null;
+  guardianEmail: string | null;
+  TShirtSize: string | null;
+  allergies: string | null;
+  paymentMade: PaymentStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// interface User {
+//   id: string;
+//   fullName: string;
+//   email: string;
+//   password?: string;
+//   contact?: string;
+//   createdAt?: Date;
+//   updatedAt?: Date;
+// }
+
+interface EventCheckIn {
+  id: string;
+  ioi: IOI;
+  ioiId: string;
+  checkedInBy: string;
+  createdAt: Date;
+}
+
 const app = express();
-configDotenv();
 app.use(express.json());
 app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-const prisma = new PrismaClient();
 
-const generateQR = async (text) => {
-  try {
-    return await QRCode.toDataURL(text);
-  } catch (err) {
-    console.error("QR generation error:", err);
-    throw err;
-  }
-};
-
+// Email transporter setup
 const createTransporter = () => {
   if (!process.env.SMTP_HOST) {
     console.warn(
@@ -39,7 +107,7 @@ const createTransporter = () => {
 
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT),
+    port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
@@ -48,98 +116,142 @@ const createTransporter = () => {
   });
 };
 
+// Generate QR code with hashed data
+const generateQR = async (text: string): Promise<string> => {
+  try {
+    return await QRCode.toDataURL(text);
+  } catch (err) {
+    console.error("QR generation error:", err);
+    throw err;
+  }
+};
+
+const authenticateAdmin = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    res.status(401).json({ message: "Authentication required" });
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "") as {
+      id: string;
+      email: string;
+    };
+    const admin = await prisma.admin.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!admin) {
+      res.status(401).json({ message: "Invalid admin credentials" });
+      return;
+    }
+
+    req.admin = { id: admin.id, email: admin.email };
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
 app.post(
-  "/admin/import-csv",
+  "/admin/confirm-payments",
   authenticateAdmin,
   upload.single("csvFile"),
-  async (req, res) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "No CSV file uploaded" });
+        res.status(400).json({ error: "No CSV file uploaded" });
+        return
       }
 
       const filePath = path.join(process.cwd(), req.file.path);
-      const results = [];
+      const results: CSVRow[] = [];
 
       fs.createReadStream(filePath)
         .pipe(csv())
-        .on("data", (data) => results.push(data))
+        .on("data", (data: CSVRow) => results.push(data))
         .on("end", async () => {
           try {
-            const processedUsers = [];
+            const processedPayments: {
+              email: string;
+              name: string;
+              status: string;
+            }[] = [];
 
             for (const row of results) {
-              const curCSV = {
-                name: row.Name || row.name || "",
-                email: row.Email || row.email || "",
-                phone: row.Phone || row.phone || "",
-                type: row.Type || row.type || null,
-                event: row.Event || row.event || null,
-                paid:
-                  (row.Paid || row.paid || "").toString().toLowerCase() ===
-                  "yes",
-                college: row.College || row.college || null,
-                accomodation:
-                  (row.Accomodation || row.accomodation || "")
-                    .toString()
-                    .toLowerCase() === "yes",
-                stream: row.Stream || row.stream || null,
-                year: row.Year || row.year || null,
-              };
+              const email = row.Email || row.email;
+              if (!email) {
+                console.warn("Skipping row with missing email");
+                continue;
+              }
 
               try {
-                const user = await prisma.user.upsert({
-                  where: { email: curCSV.email },
-                  update: curCSV,
-                  create: curCSV,
+                // Update payment status in database
+                const updatedUser = await prisma.iOI.updateMany({
+                  where: { email },
+                  data: { paymentMade: "success" },
                 });
 
-                const registration = await prisma.registration.create({
-                  data: {
-                    userId: user.id,
-                  },
+                if (updatedUser.count === 0) {
+                  console.warn(`No user found with email: ${email}`);
+                  continue;
+                }
+
+                // Get user details for email
+                const user = await prisma.iOI.findFirst({
+                  where: { email },
+                  include: { user: true },
                 });
 
+                if (!user) {
+                  console.warn(`User details not found for email: ${email}`);
+                  continue;
+                }
+
+                // Generate QR code with registration data
                 const qrHash = jwt.sign(
                   {
-                    userId: user.id,
-                    registrationId: registration.id,
+                    userId: user.user?.id || "",
+                    ioiId: user.id,
+                    email: user.email,
                   },
-                  process.env.JWT_SECRET,
-                  { expiresIn: "30d" }
+                  process.env.JWT_SECRET || "",
+                  { expiresIn: "30d" } 
                 );
 
                 const qrCode = await generateQR(qrHash);
 
-                await prisma.registration.update({
-                  where: { id: registration.id },
-                  data: {
-                    qrCodeDay1: qrCode,
-                    qrHashDay1: qrHash,
-                  },
-                });
+                // Send confirmation email with QR code
+                await sendPaymentConfirmationEmail(user as unknown as IOIWithUser, qrCode);
 
-                await sendUserEmail(user, {
-                  registrationId: registration.id,
-                  qrCode: qrCode,
-                  event: user.event,
+                processedPayments.push({
+                  email,
+                  name: user.user?.fullName || "Unknown",
+                  status: "confirmed",
                 });
-
-                processedUsers.push(user);
               } catch (error) {
-                console.error(
-                  `Error processing ${row.Email || row.email}:`,
-                  error
-                );
+                console.error(`Error processing ${email}:`, error);
+                processedPayments.push({
+                  email,
+                  name: "Unknown",
+                  status: "failed",
+                });
               }
             }
 
             fs.unlinkSync(filePath);
             res.status(200).json({
               success: true,
-              processed: processedUsers.length,
-              failed: results.length - processedUsers.length,
-              users: processedUsers,
+              processed: processedPayments.filter(p => p.status === "confirmed").length,
+              failed: processedPayments.filter(p => p.status === "failed").length,
+              skipped: results.length - processedPayments.length,
+              payments: processedPayments,
             });
           } catch (error) {
             console.error("Error processing CSV:", error);
@@ -153,7 +265,91 @@ app.post(
   }
 );
 
-const sendUserEmail = async (user, data) => {
+app.post(
+  "/admin/send-reminders",
+  authenticateAdmin, 
+  upload.single("csvFile"),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: "No CSV file uploaded" });
+        return;
+      }
+ 
+      const filePath = path.join(process.cwd(), req.file.path);
+      const results: CSVRow[] = [];
+
+      fs.createReadStream(filePath)
+        .pipe(csv())
+        .on("data", (data: CSVRow) => results.push(data))
+        .on("end", async () => {
+          try {
+            const processedReminders: {
+              email: string;
+              name: string;
+              status: string;
+            }[] = [];
+
+            for (const row of results) {
+              const email = row.Email || row.email;
+              if (!email) {
+                console.warn("Skipping row with missing email");
+                continue;
+              }
+
+              try {
+                const user = await prisma.iOI.findFirst({
+                  where: { email },
+                  include: { user: true },
+                });
+
+                if (!user) {
+                  console.warn(`No user found with email: ${email}`);
+                  continue;
+                }
+
+                if (user.paymentMade === "success") {
+                  console.log(`Payment already confirmed for ${email}`);
+                  continue;
+                }
+
+                // Type assertion to IOIWithUser
+                await sendPaymentReminderEmail(user as unknown as IOIWithUser);
+
+                processedReminders.push({
+                  email,
+                  name: user.user?.fullName || "Unknown",
+                  status: "reminder_sent",
+                });
+              } catch (error) {
+                console.error(`Error processing ${email}:`, error);
+              }
+            }
+
+            fs.unlinkSync(filePath);
+            res.status(200).json({
+              success: true,
+              processed: processedReminders.length,
+              failed: results.length - processedReminders.length,
+              reminders: processedReminders,
+            });
+          } catch (error) {
+            console.error("Error processing CSV:", error);
+            res.status(500).json({ error: "Error processing CSV" });
+          }
+        });
+    } catch (error) {
+      console.error("Error handling CSV upload:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// Email functions
+const sendPaymentConfirmationEmail = async (
+  user: IOIWithUser,
+  qrCode: string
+) => {
   try {
     const transporter = createTransporter();
     if (!transporter) {
@@ -162,117 +358,58 @@ const sendUserEmail = async (user, data) => {
     }
 
     const htmlContent = `
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Neutron Fest</title>
-        </head>
-        <body style="margin:0; padding:0; background-color:#2b2b2b; font-family:Arial, sans-serif; color:#ffffff;">
-
-          <table width="100%" height="100%" border="0" cellspacing="0" cellpadding="0">
-            <tr>
-              <td align="center" style="padding: 40px 20px;">
-                <table width="600" style="background-color: #000; border-radius: 16px; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.3); overflow: hidden;">
-
-                  <tr>
-                    <td style="padding: 40px;">
-                      <table width="100%" style="background-color: rgba(0, 0, 0, 0.5); border-radius: 12px; padding: 20px;">
-
-                        <tr>
-                          <td style="padding-bottom: 20px;">
-                            <img src="https://neutronfest.com/Hero-img/neutron-logo.png" alt="Neutron Fest Logo" width="180">
-                          </td>
-                        </tr>
-
-                        <tr>
-                          <td style="padding-top: 20px;">
-                            <h2 style="color: #fbfbfb; font-size: 22px; margin-bottom: 10px;">🎉 Congratulations ${user.name}!</h2>
-                            <p style="color: #cccccc; font-size: 16px; margin: 0;">
-                              Your registration for <strong>${data.event || "the event"}</strong> has been confirmed.
-                            </p>
-                          </td>
-                        </tr>
-
-                        <tr>
-                          <td style="padding: 20px 0;">
-                            <hr style="border: 0; height: 1px; background-color: #333;">
-                          </td>
-                        </tr>
-
-                        <tr>
-                          <td style="text-align: left; padding: 0 15px;">
-                            <h3 style="color: #fbfbfb; margin-bottom: 15px;">Registration Details</h3>
-                            <table width="100%" style="color: #bbbbbb; font-size: 15px; line-height: 1.6;">
-                              <tr>
-                                <td width="40%" style="padding: 5px 0;"><strong>Name:</strong></td>
-                                <td width="60%" style="padding: 5px 0;">${user.name}</td>
-                              </tr>
-                              <tr>
-                                <td width="40%" style="padding: 5px 0;"><strong>Email:</strong></td>
-                                <td width="60%" style="padding: 5px 0;">${user.email}</td>
-                              </tr>
-                              <tr>
-                                <td width="40%" style="padding: 5px 0;"><strong>Event:</strong></td>
-                                <td width="60%" style="padding: 5px 0;">${data.event || "Neutron Fest 2025"}</td>
-                              </tr>
-                              <tr>
-                                <td width="40%" style="padding: 5px 0;"><strong>Registration ID:</strong></td>
-                                <td width="60%" style="padding: 5px 0;">${data.registrationId}</td>
-                              </tr>
-                              ${
-                                user.college
-                                  ? `
-                              <tr>
-                                <td width="40%" style="padding: 5px 0;"><strong>College:</strong></td>
-                                <td width="60%" style="padding: 5px 0;">${user.college}</td>
-                              </tr>`
-                                  : ""
-                              }
-                            </table>
-                          </td>
-                        </tr>
-
-                        <tr>
-                          <td style="padding: 25px 0;">
-                            <h3 style="color: #fbfbfb; margin-bottom: 15px;">Your Event QR Code</h3>
-                            <img src="cid:qrcode" alt="Event QR Code" style="width: 200px; height: 200px;"/>
-                            <p style="color: #bbbbbb; font-size: 14px; margin-top: 15px;">
-                              Please present this QR code at the event venue for check-in on both days.<br>
-                              <strong>Note:</strong> This QR code will be valid for Day 1 and Day 2 check-ins.
-                            </p>
-                          </td>
-                        </tr>
-
-                        <tr>
-                          <td style="color: #555; font-size: 12px; padding-top: 15px; border-top: 1px solid #333;">
-                            This message was sent to: ${user.email}<br>
-                            ©️ 2025 Neutron Fest. All rights reserved.
-                          </td>
-                        </tr>
-
-                      </table>
-                    </td>
-                  </tr>
-
-                </table>
-              </td>
-            </tr>
-          </table>
-
-        </body>
-        </html>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+          .header { background-color: #f8f8f8; padding: 10px; text-align: center; border-bottom: 1px solid #ddd; }
+          .content { padding: 20px; }
+          .footer { text-align: center; font-size: 12px; color: #777; margin-top: 20px; }
+          .qr-code { text-align: center; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>IOI Registration Confirmation</h2>
+          </div>
+          <div class="content">
+            <p>Dear ${user.user?.fullName || "Participant"},</p>
+            <p>We are pleased to inform you that your payment for IOI registration has been successfully processed.</p>
+            
+            <h3>Registration Details:</h3>
+            <p><strong>Name:</strong> ${user.user?.fullName || "N/A"}</p>
+            <p><strong>School:</strong> ${user.schoolName || "N/A"}</p>
+            <p><strong>City:</strong> ${user.city || "N/A"}</p>
+            <p><strong>Grade:</strong> ${user.Grade || "N/A"}</p>
+            
+            <div class="qr-code">
+              <h3>Your Event QR Code</h3>
+              <img src="cid:qrcode" alt="Event QR Code" style="width: 200px; height: 200px;"/>
+              <p>Please present this QR code at the event venue for check-in.</p>
+            </div>
+            
+            <p>Thank you for registering. We look forward to seeing you at the event!</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply directly to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
     `;
 
     const mailOptions = {
       from: process.env.FROM_EMAIL,
       to: user.email,
-      subject: `Your ${data.event || "Event"} Registration`,
+      subject: "IOI Registration Payment Confirmation",
       html: htmlContent,
       attachments: [
         {
           filename: "qrcode.png",
-          content: data.qrCode.split("base64,")[1],
+          content: qrCode.split("base64,")[1],
           encoding: "base64",
           cid: "qrcode",
         },
@@ -280,27 +417,287 @@ const sendUserEmail = async (user, data) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`Email sent to ${user.email}`);
+    console.log(`Confirmation email sent to ${user.email}`);
   } catch (error) {
-    console.error(`Error sending email to ${user.email}:`, error);
+    console.error(`Error sending confirmation email to ${user.email}:`, error);
   }
 };
-// console.log(await bcrypt.hash("admin6", 10));
-app.post("/admin/register", async (req, res) => {
-  const { email, password, firstName, lastName, phone } = req.body;
+
+const sendPaymentReminderEmail = async (user: IOIWithUser) => {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) {
+      console.warn("SMTP not configured - email not sent");
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+          .header { background-color: #f8f8f8; padding: 10px; text-align: center; border-bottom: 1px solid #ddd; }
+          .content { padding: 20px; }
+          .footer { text-align: center; font-size: 12px; color: #777; margin-top: 20px; }
+          .button {
+            display: inline-block; padding: 10px 20px; background-color: #4CAF50; 
+            color: white; text-decoration: none; border-radius: 5px; margin: 15px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>IOI Payment Reminder</h2>
+          </div>
+          <div class="content">
+            <p>Dear ${user.user?.fullName || "Participant"},</p>
+            <p>We noticed that your payment for the IOI registration is still pending.</p>
+            
+            <h3>Your Registration Details:</h3>
+            <p><strong>Name:</strong> ${user.user?.fullName || "N/A"}</p>
+            <p><strong>School:</strong> ${user.schoolName || "N/A"}</p>
+            <p><strong>City:</strong> ${user.city || "N/A"}</p>
+            <p><strong>Grade:</strong> ${user.Grade || "N/A"}</p>
+            
+            <p>To complete your registration, please make the payment at your earliest convenience.</p>
+            <a href="${process.env.PAYMENT_LINK || "https://yourpaymentlink.com"}" class="button">Complete Payment Now</a>
+            
+            <p>If you've already made the payment, please ignore this reminder.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message. Please do not reply directly to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: process.env.FROM_EMAIL,
+      to: user.email,
+      subject: "Reminder: Complete Your IOI Registration Payment",
+      html: htmlContent,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Reminder email sent to ${user.email}`);
+  } catch (error) {
+    console.error(`Error sending reminder email to ${user.email}:`, error);
+  }
+};
+
+// Analytics endpoints
+app.get(
+  "/admin/analytics/ioi",
+  authenticateAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // Payment status distribution
+      const paymentStatusDistribution = await prisma.iOI.groupBy({
+        by: ["paymentMade"],
+        _count: { 
+          paymentMade: true,
+          _all: true 
+        },
+      });
+
+      // School distribution
+      const schoolDistribution = await prisma.iOI.groupBy({
+        by: ["schoolName"],
+        _count: { schoolName: true },
+        orderBy: { _count: { schoolName: "desc" } },
+        take: 10,
+      });
+
+      // City distribution
+      const cityDistribution = await prisma.iOI.groupBy({
+        by: ["city"],
+        _count: { city: true },
+        orderBy: { _count: { city: "desc" } },
+        take: 10,
+      });
+
+      // Grade distribution
+      const gradeDistribution = await prisma.iOI.groupBy({
+        by: ["Grade"],
+        _count: { Grade: true },
+        orderBy: { Grade: "asc" },
+      });
+
+      // Total registrations and payments
+      const totalRegistrations = await prisma.iOI.count();
+      const paidRegistrations = await prisma.iOI.count({
+        where: { paymentMade: PaymentStatus.success },
+      });
+ 
+      // Recent registrations
+      const recentRegistrations = await prisma.iOI.findMany({
+        take: 10,
+        orderBy: { createdAt: "desc" },
+        include: { user: true },
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          totals: {
+            registrations: totalRegistrations,
+            paid: paidRegistrations,
+            unpaid: totalRegistrations - paidRegistrations,
+            paymentPercentage:
+              totalRegistrations > 0
+                ? Math.round((paidRegistrations / totalRegistrations) * 100)
+                : 0,
+          },
+          distributions: {
+            paymentStatus: paymentStatusDistribution.map((p) => ({
+              status: p.paymentMade,
+              count: p._count._all, // Changed from p._count.paymentMade to p._count._all
+            })),
+            schools: schoolDistribution.map((s) => ({
+              school: s.schoolName || "Unknown",
+              count: s._count.schoolName,
+            })),
+            cities: cityDistribution.map((c) => ({
+              city: c.city || "Unknown",
+              count: c._count.city,
+            })),
+            grades: gradeDistribution.map((g) => ({
+              grade: g.Grade || "Unknown",
+              count: g._count.Grade,
+            })),
+          },
+          recentRegistrations: recentRegistrations.map((r) => ({
+            id: r.id,
+            name: r.user?.fullName || "Unknown",
+            email: r.email,
+            school: r.schoolName,
+            city: r.city,
+            grade: r.Grade,
+            paymentStatus: r.paymentMade,
+            createdAt: r.createdAt,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching IOI analytics:", error);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  }
+);
+
+// QR Code verification endpoint
+app.post(
+  "/admin/verify-qr",
+  authenticateAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { qrHash } = req.body;
+
+      if (!qrHash) {
+        res.status(400).json({ error: "QR token is required" });
+        return
+      }
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(qrHash, process.env.JWT_SECRET || "") as {
+          userId: string;
+          ioiId: string;
+          email: string;
+        };
+      } catch (err) {
+        res.status(401).json({ error: "Invalid or expired QR code" });
+        return
+      }
+
+      const user = await prisma.iOI.findUnique({
+        where: { id: decoded.ioiId },
+        include: { user: true },
+      });
+
+      if (!user) {
+        res.status(404).json({ error: "Registration not found" });
+        return
+      }
+
+      // Check if already checked in
+      const existingCheckIn = await prisma.eventCheckIn.findFirst({
+        where: { ioiId: decoded.ioiId },
+      });
+
+      if (existingCheckIn) {
+        res.status(409).json({
+          error: "Already checked in",
+          attendee: {
+            id: user.id,
+            name: user.user?.fullName || "Unknown",
+            email: user.email,
+            school: user.schoolName,
+            city: user.city,
+            grade: user.Grade,
+            paymentStatus: user.paymentMade,
+            checkedInAt: existingCheckIn.createdAt,
+          },
+        });
+        return
+      }
+
+      // Record check-in
+      const checkIn = await prisma.eventCheckIn.create({
+        data: {
+          ioiId: decoded.ioiId,
+          checkedInBy: req.admin?.email || "system",
+        },
+        include: {
+          ioi: {
+            include: {
+              user: true,
+            },
+          },
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        attendee: {
+          id: checkIn.ioi.id,
+          name: checkIn.ioi.user?.fullName || "Unknown",
+          email: checkIn.ioi.email,
+          school: checkIn.ioi.schoolName,
+          city: checkIn.ioi.city,
+          grade: checkIn.ioi.Grade,
+          paymentStatus: checkIn.ioi.paymentMade,
+          checkedInAt: checkIn.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("Error verifying QR code:", error);
+      res.status(500).json({ error: "Failed to verify QR code" });
+    }
+  }
+);
+
+// Admin authentication routes
+app.post("/admin/register", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
 
   try {
-    const adminExists = await prisma.admin.findUnique({
+    const adminExists = await prisma.admin.findFirst({
       where: { email },
     });
 
     if (adminExists) {
-      return res.status(400).json({ message: "Admin already exists" });
+      res.status(400).json({ message: "Admin already exists" });
+      return
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newAdmin = await prisma.admin.create({
-      data: { firstName, lastName, email, password: hashedPassword, phone },
+      data: { email, password: hashedPassword },
     });
 
     res
@@ -312,26 +709,29 @@ app.post("/admin/register", async (req, res) => {
   }
 });
 
-app.post("/admin/login", async (req, res) => {
+app.post("/admin/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   try {
-    const admin = await prisma.admin.findUnique({
+    const admin = await prisma.admin.findFirst({
       where: { email },
     });
 
     if (!admin) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      res.status(400).json({ message: "Invalid email or password" });
+      return
     }
 
     const validPassword = await bcrypt.compare(password, admin.password);
     if (!validPassword) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      res.status(400).json({ message: "Invalid email or password" });
+      return
     }
 
     const token = jwt.sign(
       { id: admin.id, email: admin.email },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET || "",
+      { expiresIn: "1d" }
     );
     res.status(200).json({ message: "Admin logged in successfully", token });
   } catch (error) {
@@ -340,325 +740,8 @@ app.post("/admin/login", async (req, res) => {
   }
 });
 
-app.get("/admin/attendees", authenticateAdmin, async (req, res) => {
-  try {
-    const attendances = await prisma.attendance.findMany({
-      include: {
-        user: true,
-      },
-      orderBy: {
-        checkInTime: "desc",
-      },
-    });
-
-    const formattedAttendees = attendances.map((att) => ({
-      id: att.user.id,
-      name: att.user.name,
-      email: att.user.email,
-      phone: att.user.phone,
-      type: att.user.type,
-      event: att.user.event,
-      paid: att.user.paid,
-      college: att.user.college,
-      accomodation: att.user.accomodation,
-      stream: att.user.stream,
-      year: att.user.year,
-      day: att.day,
-      checkInTime: att.checkInTime,
-    }));
-
-    res.json({
-      count: formattedAttendees.length,
-      attendees: formattedAttendees,
-    });
-  } catch (error) {
-    console.error("Error fetching attendees:", error);
-    res.status(500).json({ error: "Failed to fetch attendees" });
-  }
-});
-
-app.post("/admin/verify-attendee", authenticateAdmin, async (req, res) => {
-  try {
-    const { qrHash, day } = req.body;
-
-    if (!qrHash) {
-      return res.status(400).json({ error: "QR token is required" });
-    }
-
-    if (!day || (day !== 1 && day !== 2)) {
-      return res.status(400).json({ error: "Valid day (1 or 2) is required" });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(qrHash, process.env.JWT_SECRET);
-    } catch (err) {
-      return res.status(401).json({ error: "Invalid or expired QR code" });
-    }
-
-    const { userId, registrationId } = decoded;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const registration = await prisma.registration.findUnique({
-      where: { id: registrationId },
-    });
-
-    if (!registration) {
-      return res.status(404).json({ error: "Registration not found" });
-    }
-
-    const existingAttendance = await prisma.attendance.findFirst({
-      where: {
-        userId: userId,
-        day: day,
-      },
-    });
-
-    if (existingAttendance) {
-      return res.status(409).json({
-        error: `Already checked in for day ${day}`,
-        attendee: {
-          ...user,
-          day: day,
-          checkInTime: existingAttendance.checkInTime,
-        },
-      });
-    }
-
-    const admin = await prisma.admin.findUnique({
-      where: { id: req.admin.id },
-    });
-
-    if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-
-    const attendance = await prisma.attendance.create({
-      data: {
-        registrationId: registrationId,
-        userId: userId,
-        day: day,
-        verifiedBy: admin.email,
-      },
-      include: {
-        user: true,
-        admin: true,
-      },
-    });
-
-    res.status(200).json({
-      success: true,
-      attendee: {
-        ...attendance.user,
-        day: attendance.day,
-        checkInTime: attendance.checkInTime,
-        verifiedBy: attendance.admin.email,
-      },
-    });
-  } catch (error) {
-    console.error("Error verifying attendee:", error);
-    res.status(500).json({ error: "Failed to verify attendee" });
-  }
-});
-
-app.get("/admin/analytics", authenticateAdmin, async (req, res) => {
-  try {
-    const totalUsers = await prisma.user.count();
-    const totalRegistrations = await prisma.registration.count();
-
-    const totalAttendancesDay1 = await prisma.attendance.count({
-      where: { day: 1 },
-    });
-
-    const totalAttendancesDay2 = await prisma.attendance.count({
-      where: { day: 2 },
-    });
-
-    const today = new Date(new Date().setHours(0, 0, 0, 0));
-    const registrationsToday = await prisma.registration.count({
-      where: { createdAt: { gte: today } },
-    });
-
-    const attendeesTodayDay1 = await prisma.attendance.count({
-      where: {
-        checkInTime: { gte: today },
-        day: 1,
-      },
-    });
-
-    const attendeesTodayDay2 = await prisma.attendance.count({
-      where: {
-        checkInTime: { gte: today },
-        day: 2,
-      },
-    });
-
-    const eventDistribution = await prisma.user.groupBy({
-      by: ["event"],
-      _count: { event: true },
-      orderBy: { _count: { event: "desc" } },
-    });
-
-    const paymentStatus = await prisma.user.groupBy({
-      by: ["paid"],
-      _count: { paid: true },
-    });
-
-    const accommodationStatus = await prisma.user.groupBy({
-      by: ["accomodation"],
-      _count: { accomodation: true },
-    });
-
-    const universityDistribution = await prisma.user.groupBy({
-      by: ["college"],
-      _count: { college: true },
-      orderBy: { _count: { college: "desc" } },
-      take: 10,
-    });
-
-    const yearDistribution = await prisma.user.groupBy({
-      by: ["year"],
-      _count: { year: true },
-      orderBy: { year: "asc" },
-    });
-
-    const streamDistribution = await prisma.user.groupBy({
-      by: ["stream"],
-      _count: { stream: true },
-      orderBy: { _count: { stream: "desc" } },
-    });
-
-    const typeDistribution = await prisma.user.groupBy({
-      by: ["type"],
-      _count: { type: true },
-      orderBy: { _count: { type: "desc" } },
-    });
-
-    const attendanceTimelineDay1 = await prisma.$queryRaw`
-      SELECT 
-        DATE("checkInTime") as date,
-        COUNT(*) as count
-      FROM "Attendance"
-      WHERE "checkInTime" >= NOW() - INTERVAL '7 days' AND day = 1
-      GROUP BY DATE("checkInTime")
-      ORDER BY date ASC
-    `;
-
-    const attendanceTimelineDay2 = await prisma.$queryRaw`
-      SELECT 
-        DATE("checkInTime") as date,
-        COUNT(*) as count
-      FROM "Attendance"
-      WHERE "checkInTime" >= NOW() - INTERVAL '7 days' AND day = 2
-      GROUP BY DATE("checkInTime")
-      ORDER BY date ASC
-    `;
-
-    const adminActivity = await prisma.attendance.groupBy({
-      by: ["verifiedBy", "day"],
-      _count: { verifiedBy: true },
-      orderBy: { _count: { verifiedBy: "desc" } },
-    });
-
-    const usersAttendedBothDays = await prisma.user.count({
-      where: {
-        attendances: {
-          some: { day: 1 },
-        },
-        AND: [
-          {
-            attendances: {
-              some: { day: 2 },
-            },
-          },
-        ],
-      },
-    });
-
-    res.json({
-      totals: {
-        users: totalUsers,
-        registrations: totalRegistrations,
-        attendancesDay1: totalAttendancesDay1,
-        attendancesDay2: totalAttendancesDay2,
-        attendanceRateDay1:
-          totalRegistrations > 0
-            ? (totalAttendancesDay1 / totalRegistrations) * 100
-            : 0,
-        attendanceRateDay2:
-          totalRegistrations > 0
-            ? (totalAttendancesDay2 / totalRegistrations) * 100
-            : 0,
-        usersAttendedBothDays: usersAttendedBothDays,
-        returnRate:
-          totalAttendancesDay1 > 0
-            ? (usersAttendedBothDays / totalAttendancesDay1) * 100
-            : 0,
-      },
-      today: {
-        registrations: registrationsToday,
-        attendancesDay1: attendeesTodayDay1,
-        attendancesDay2: attendeesTodayDay2,
-      },
-      distributions: {
-        events: eventDistribution.map((e) => ({
-          event: e.event || "Unknown",
-          count: e._count.event,
-        })),
-        payment: paymentStatus.map((p) => ({
-          status: p.paid ? "Paid" : "Unpaid",
-          count: p._count.paid,
-        })),
-        accommodation: accommodationStatus.map((a) => ({
-          status: a.accomodation ? "Yes" : "No",
-          count: a._count.accomodation,
-        })),
-        universities: universityDistribution.map((u) => ({
-          university: u.college || "Unknown",
-          count: u._count.college,
-        })),
-        years: yearDistribution.map((y) => ({
-          year: y.year || "Unknown",
-          count: y._count.year,
-        })),
-        streams: streamDistribution.map((s) => ({
-          stream: s.stream || "Unknown",
-          count: s._count.stream,
-        })),
-        types: typeDistribution.map((t) => ({
-          type: t.type || "Unknown",
-          count: t._count.type,
-        })),
-      },
-      timeline: {
-        attendanceDay1: attendanceTimelineDay1.map((a) => ({
-          date: a.date,
-          count: Number(a.count),
-        })),
-        attendanceDay2: attendanceTimelineDay2.map((a) => ({
-          date: a.date,
-          count: Number(a.count),
-        })),
-      },
-      adminActivity: adminActivity.map((a) => ({
-        admin: a.verifiedBy,
-        day: a.day,
-        verifications: a._count.verifiedBy,
-      })),
-    });
-  } catch (error) {
-    console.error("Error fetching analytics:", error);
-    res.status(500).json({ error: "Failed to fetch analytics" });
-  }
-});
-
-app.listen(3000, () => {
-  console.log("Server listening on port 3000");
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });

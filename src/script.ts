@@ -11,10 +11,10 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { config } from "dotenv";
 import { prisma } from './index'
+import { authenticateAdmin } from "./middlewares/adminMiddleware";
 
 config();
 
-// Align enums with Prisma schema
 enum PaymentStatus {
   pending = "pending",
   success = "success",
@@ -93,7 +93,6 @@ const createTransporter = () => {
     );
     return null;
   }
-
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || "587"),
@@ -111,39 +110,6 @@ const generateQR = async (text: string): Promise<string> => {
   } catch (err) {
     console.error("QR generation error:", err);
     throw err;
-  }
-};
-
-const authenticateAdmin = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
-    res.status(401).json({ message: "Authentication required" });
-    return;
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "123123") as {
-      id: string;
-      email: string;
-    };
-    const admin = await prisma.admin.findUnique({
-      where: { id: decoded.id },
-    });
-
-    if (!admin) {
-      res.status(401).json({ message: "Invalid admin credentials" });
-      return;
-    }
-
-    req.admin = { id: admin.id, email: admin.email };
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Invalid token" });
   }
 };
 
@@ -201,15 +167,13 @@ app.post(
                   continue;
                 }
 
-                // Generate QR code with registration data
                 const qrHash = jwt.sign(
                   {
                     userId: user.userId,
                     ioiId: user.id,
                     email: user.email,
                   },
-                  process.env.JWT_SECRET || "123123",
-                  { expiresIn: "30d" } 
+                  process.env.JWT_SECRET || "123123"
                 );
 
                 const qrCode = await generateQR(qrHash);
@@ -504,6 +468,7 @@ app.get(
         take: 10,
       });
 
+      // Convert BigInt to String in the grade distribution
       const gradeDistribution = await prisma.iOI.groupBy({
         by: ["grade"],
         _count: { grade: true },
@@ -521,7 +486,8 @@ app.get(
         include: { user: true },
       });
 
-      res.status(200).json({
+      // Create a response object with BigInt values converted to strings
+      const response = {
         success: true,
         data: {
           totals: {
@@ -547,22 +513,42 @@ app.get(
               count: c._count.city,
             })),
             grades: gradeDistribution.map((g) => ({
-              grade: g.grade || "Unknown",  // Changed from Grade to grade
-              count: g._count.grade,  // Changed from Grade to grade
+              // Convert BigInt to string
+              grade: g.grade ? g.grade.toString() : "Unknown",
+              count: g._count.grade,
             })),
           },
           recentRegistrations: recentRegistrations.map((r) => ({
             id: r.id,
-            name: r.fullName,  // Changed from user?.fullName to fullName
+            name: r.fullName,
             email: r.email,
-            school: r.schoolName,
+            candidateContact: r.candidateContact.toString(),
+            candidateAdhaar: r.candidateAdhaar.toString(),
+            schoolName: r.schoolName,
             city: r.city,
-            grade: r.grade.toString(),  // Changed from Grade to grade, added toString()
+            grade: r.grade.toString(),
+            codeforcesUsername: r.codeforcesUsername,
+            codeforcesRating: r.codeforcesRating ? r.codeforcesRating.toString() : null,
+            codechefUsername: r.codechefUsername,
+            codechefRating: r.codechefRating ? r.codechefRating.toString() : null,
+            participationHistory: r.participationHistory,
+            CPAchievements: r.CPAchievements,
+            chennaiParticipation: r.chennaiParticipation,
+            volunteerInterest: r.volunteerInterest,
+            campInterest: r.campInterest,
+            guardianName: r.guardianName,
+            guardianContact: r.guardianContact.toString(),
+            guardianEmail: r.guardianEmail,
+            TShirtSize: r.TShirtSize,
+            allergies: r.allergies,
             paymentStatus: r.paymentMade,
             createdAt: r.createdAt,
+            updatedAt: r.updatedAt
           })),
         },
-      });
+      };
+
+      res.status(200).json(response);
     } catch (error) {
       console.error("Error fetching IOI analytics:", error);
       res.status(500).json({ success: false, error: "Internal server error" });
@@ -570,7 +556,6 @@ app.get(
   }
 );
 
-// QR Code verification endpoint
 app.post(
   "/admin/verify-qr",
   authenticateAdmin,
@@ -615,11 +600,11 @@ app.post(
           error: "Already checked in",
           attendee: {
             id: user.id,
-            name: user.fullName,  // Changed from user?.fullName to fullName
+            name: user.fullName,
             email: user.email,
             school: user.schoolName,
             city: user.city,
-            grade: user.grade.toString(),  // Changed from Grade to grade, added toString()
+            grade: user.grade.toString(),
             paymentStatus: user.paymentMade,
             checkedInAt: existingCheckIn.createdAt,
           },

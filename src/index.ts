@@ -3,6 +3,7 @@ import { PrismaClient } from "../prisma/generated/client";
 import cookieParser from "cookie-parser";
 import { sign, verify } from "jsonwebtoken";
 import { hash, compare } from "bcryptjs";
+import cors from "cors";
 import dotenv from "dotenv";
 import { Request, Response } from "express";
 import authMiddleware, {
@@ -15,6 +16,12 @@ dotenv.config();
 const app = Express();
 app.use(Express.json());
 app.use(cookieParser());
+app.use(
+  cors({
+    origin: process.env.FRONTEND,
+    credentials: true,
+  }),
+);
 
 interface IOI {
   userId: string;
@@ -44,6 +51,7 @@ interface IOI {
 app.post("/register", async (req: Request, res: Response) => {
   try {
     const { name, email, password } = req.body;
+    console.log(name, email, password);
     res.clearCookie("token");
     if (!name || !email || !password) {
       res.status(400).json({ error: "All fields are required" });
@@ -255,7 +263,9 @@ app.post(
           allergies,
         },
       });
-      res.status(200).json({ message: "Yes", ioiID: ioi.id });
+      res
+        .status(200)
+        .json({ message: "Registered Successfully", ioiID: ioi.id });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Internal server error" });

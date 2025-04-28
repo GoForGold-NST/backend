@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "concurrently \"ts-node-dev src/index.ts\" \"ts-node src/script.ts\""
+    "dev": "concurrently \"ts-node-dev src/index.ts\" \"ts-node src/script.ts\"",
+    "start": "concurrently \"ts-node src/index.ts\" \"ts-node src/script.ts\""
   },
   "keywords": [],
   "author": "",

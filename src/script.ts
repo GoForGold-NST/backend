@@ -4,23 +4,23 @@ import csv from 'csv-parser';
 import fs from "fs";
 import path from "path";
 import QRCode from "qrcode"
-import { PrismaClient, IOI, User } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import cors from 'cors';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { config } from "dotenv";
-import { prisma } from './index.ts'
+import { prisma } from './index'
 
 config();
 
-// Define enums that match your Prisma schema
+// Align enums with Prisma schema
 enum PaymentStatus {
   pending = "pending",
   success = "success",
 }
 
-enum Bool {
+enum YesNo {
   YES = "YES",
   NO = "NO",
 }
@@ -43,47 +43,38 @@ interface IOIWithUser {
     id: string;
     fullName: string;
     email: string;
-    password: string | null;
+    password: string;
   } | null;
-  userId?: string | null;
+  userId: string;
+  fullName: string; // Added to match schema
   email: string;
-  candidateContact: string;
-  candidateAdhaar: string;
+  candidateContact: bigint;
+  candidateAdhaar: bigint;
   schoolName: string;
   city: string;
-  Grade: number;
+  grade: bigint; // Changed from Grade to grade
   codeforcesUsername: string | null;
-  codeforcesRating: number | null;
+  codeforcesRating: bigint | null;
   codechefUsername: string | null;
-  codechefRating: number | null;
-  participationHistory: boolean;
+  codechefRating: bigint | null;
+  participationHistory: YesNo;
   CPAchievements: string | null;
-  chennaiParticipation: boolean;
-  volunteerInterest: boolean;
-  campInterest: string | null;
-  guardianName: string | null;
-  guardianContact: string | null;
-  guardianEmail: string | null;
-  TShirtSize: string | null;
+  chennaiParticipation: YesNo;
+  volunteerInterest: YesNo;
+  campInterest: string;
+  guardianName: string;
+  guardianContact: bigint;
+  guardianEmail: string;
+  TShirtSize: string;
   allergies: string | null;
   paymentMade: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// interface User {
-//   id: string;
-//   fullName: string;
-//   email: string;
-//   password?: string;
-//   contact?: string;
-//   createdAt?: Date;
-//   updatedAt?: Date;
-// }
-
 interface EventCheckIn {
   id: string;
-  ioi: IOI;
+  ioi: IOIWithUser;
   ioiId: string;
   checkedInBy: string;
   createdAt: Date;
@@ -95,8 +86,6 @@ app.use(cors());
 
 const upload = multer({ dest: "uploads/" });
 
-
-// Email transporter setup
 const createTransporter = () => {
   if (!process.env.SMTP_HOST) {
     console.warn(
@@ -116,7 +105,6 @@ const createTransporter = () => {
   });
 };
 
-// Generate QR code with hashed data
 const generateQR = async (text: string): Promise<string> => {
   try {
     return await QRCode.toDataURL(text);
@@ -138,7 +126,7 @@ const authenticateAdmin = async (
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "") as {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "123123") as {
       id: string;
       email: string;
     };
@@ -192,7 +180,6 @@ app.post(
               }
 
               try {
-                // Update payment status in database
                 const updatedUser = await prisma.iOI.updateMany({
                   where: { email },
                   data: { paymentMade: "success" },
@@ -217,11 +204,11 @@ app.post(
                 // Generate QR code with registration data
                 const qrHash = jwt.sign(
                   {
-                    userId: user.user?.id || "",
+                    userId: user.userId,
                     ioiId: user.id,
                     email: user.email,
                   },
-                  process.env.JWT_SECRET || "",
+                  process.env.JWT_SECRET || "123123",
                   { expiresIn: "30d" } 
                 );
 
@@ -232,7 +219,7 @@ app.post(
 
                 processedPayments.push({
                   email,
-                  name: user.user?.fullName || "Unknown",
+                  name: user.fullName,
                   status: "confirmed",
                 });
               } catch (error) {
@@ -318,7 +305,7 @@ app.post(
 
                 processedReminders.push({
                   email,
-                  name: user.user?.fullName || "Unknown",
+                  name: user.fullName,
                   status: "reminder_sent",
                 });
               } catch (error) {
@@ -376,14 +363,14 @@ const sendPaymentConfirmationEmail = async (
             <h2>IOI Registration Confirmation</h2>
           </div>
           <div class="content">
-            <p>Dear ${user.user?.fullName || "Participant"},</p>
+            <p>Dear ${user.fullName},</p>
             <p>We are pleased to inform you that your payment for IOI registration has been successfully processed.</p>
             
             <h3>Registration Details:</h3>
-            <p><strong>Name:</strong> ${user.user?.fullName || "N/A"}</p>
-            <p><strong>School:</strong> ${user.schoolName || "N/A"}</p>
-            <p><strong>City:</strong> ${user.city || "N/A"}</p>
-            <p><strong>Grade:</strong> ${user.Grade || "N/A"}</p>
+            <p><strong>Name:</strong> ${user.fullName}</p>
+            <p><strong>School:</strong> ${user.schoolName}</p>
+            <p><strong>City:</strong> ${user.city}</p>
+            <p><strong>Grade:</strong> ${user.grade.toString()}</p>
             
             <div class="qr-code">
               <h3>Your Event QR Code</h3>
@@ -453,14 +440,14 @@ const sendPaymentReminderEmail = async (user: IOIWithUser) => {
             <h2>IOI Payment Reminder</h2>
           </div>
           <div class="content">
-            <p>Dear ${user.user?.fullName || "Participant"},</p>
+            <p>Dear ${user.fullName},</p>
             <p>We noticed that your payment for the IOI registration is still pending.</p>
             
             <h3>Your Registration Details:</h3>
-            <p><strong>Name:</strong> ${user.user?.fullName || "N/A"}</p>
-            <p><strong>School:</strong> ${user.schoolName || "N/A"}</p>
-            <p><strong>City:</strong> ${user.city || "N/A"}</p>
-            <p><strong>Grade:</strong> ${user.Grade || "N/A"}</p>
+            <p><strong>Name:</strong> ${user.fullName}</p>
+            <p><strong>School:</strong> ${user.schoolName}</p>
+            <p><strong>City:</strong> ${user.city}</p>
+            <p><strong>Grade:</strong> ${user.grade.toString()}</p>
             
             <p>To complete your registration, please make the payment at your earliest convenience.</p>
             <a href="${process.env.PAYMENT_LINK || "https://yourpaymentlink.com"}" class="button">Complete Payment Now</a>
@@ -489,13 +476,11 @@ const sendPaymentReminderEmail = async (user: IOIWithUser) => {
   }
 };
 
-// Analytics endpoints
 app.get(
   "/admin/analytics/ioi",
   authenticateAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      // Payment status distribution
       const paymentStatusDistribution = await prisma.iOI.groupBy({
         by: ["paymentMade"],
         _count: { 
@@ -504,7 +489,6 @@ app.get(
         },
       });
 
-      // School distribution
       const schoolDistribution = await prisma.iOI.groupBy({
         by: ["schoolName"],
         _count: { schoolName: true },
@@ -520,20 +504,17 @@ app.get(
         take: 10,
       });
 
-      // Grade distribution
       const gradeDistribution = await prisma.iOI.groupBy({
-        by: ["Grade"],
-        _count: { Grade: true },
-        orderBy: { Grade: "asc" },
+        by: ["grade"],
+        _count: { grade: true },
+        orderBy: { grade: "asc" },
       });
 
-      // Total registrations and payments
       const totalRegistrations = await prisma.iOI.count();
       const paidRegistrations = await prisma.iOI.count({
         where: { paymentMade: PaymentStatus.success },
       });
  
-      // Recent registrations
       const recentRegistrations = await prisma.iOI.findMany({
         take: 10,
         orderBy: { createdAt: "desc" },
@@ -555,7 +536,7 @@ app.get(
           distributions: {
             paymentStatus: paymentStatusDistribution.map((p) => ({
               status: p.paymentMade,
-              count: p._count._all, // Changed from p._count.paymentMade to p._count._all
+              count: p._count._all,
             })),
             schools: schoolDistribution.map((s) => ({
               school: s.schoolName || "Unknown",
@@ -566,17 +547,17 @@ app.get(
               count: c._count.city,
             })),
             grades: gradeDistribution.map((g) => ({
-              grade: g.Grade || "Unknown",
-              count: g._count.Grade,
+              grade: g.grade || "Unknown",  // Changed from Grade to grade
+              count: g._count.grade,  // Changed from Grade to grade
             })),
           },
           recentRegistrations: recentRegistrations.map((r) => ({
             id: r.id,
-            name: r.user?.fullName || "Unknown",
+            name: r.fullName,  // Changed from user?.fullName to fullName
             email: r.email,
             school: r.schoolName,
             city: r.city,
-            grade: r.Grade,
+            grade: r.grade.toString(),  // Changed from Grade to grade, added toString()
             paymentStatus: r.paymentMade,
             createdAt: r.createdAt,
           })),
@@ -604,7 +585,7 @@ app.post(
 
       let decoded: any;
       try {
-        decoded = jwt.verify(qrHash, process.env.JWT_SECRET || "") as {
+        decoded = jwt.verify(qrHash, process.env.JWT_SECRET || "123123") as {
           userId: string;
           ioiId: string;
           email: string;
@@ -634,11 +615,11 @@ app.post(
           error: "Already checked in",
           attendee: {
             id: user.id,
-            name: user.user?.fullName || "Unknown",
+            name: user.fullName,  // Changed from user?.fullName to fullName
             email: user.email,
             school: user.schoolName,
             city: user.city,
-            grade: user.Grade,
+            grade: user.grade.toString(),  // Changed from Grade to grade, added toString()
             paymentStatus: user.paymentMade,
             checkedInAt: existingCheckIn.createdAt,
           },
@@ -653,11 +634,7 @@ app.post(
           checkedInBy: req.admin?.email || "system",
         },
         include: {
-          ioi: {
-            include: {
-              user: true,
-            },
-          },
+          ioi: true
         },
       });
 
@@ -665,11 +642,11 @@ app.post(
         success: true,
         attendee: {
           id: checkIn.ioi.id,
-          name: checkIn.ioi.user?.fullName || "Unknown",
+          name: checkIn.ioi.fullName,
           email: checkIn.ioi.email,
           school: checkIn.ioi.schoolName,
           city: checkIn.ioi.city,
-          grade: checkIn.ioi.Grade,
+          grade: checkIn.ioi.grade.toString(),
           paymentStatus: checkIn.ioi.paymentMade,
           checkedInAt: checkIn.createdAt,
         },
@@ -681,7 +658,6 @@ app.post(
   }
 );
 
-// Admin authentication routes
 app.post("/admin/register", async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -730,7 +706,7 @@ app.post("/admin/login", async (req: Request, res: Response) => {
 
     const token = jwt.sign(
       { id: admin.id, email: admin.email },
-      process.env.JWT_SECRET || "",
+      process.env.JWT_SECRET || "123123",
       { expiresIn: "1d" }
     );
     res.status(200).json({ message: "Admin logged in successfully", token });
@@ -740,7 +716,6 @@ app.post("/admin/login", async (req: Request, res: Response) => {
   }
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);

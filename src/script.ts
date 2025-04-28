@@ -4,7 +4,6 @@ import csv from 'csv-parser';
 import fs from "fs";
 import path from "path";
 import QRCode from "qrcode"
-import { PrismaClient } from "@prisma/client";
 import cors from 'cors';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -46,13 +45,13 @@ interface IOIWithUser {
     password: string;
   } | null;
   userId: string;
-  fullName: string; // Added to match schema
+  fullName: string;
   email: string;
   candidateContact: bigint;
   candidateAdhaar: bigint;
   schoolName: string;
   city: string;
-  grade: bigint; // Changed from Grade to grade
+  grade: bigint;
   codeforcesUsername: string | null;
   codeforcesRating: bigint | null;
   codechefUsername: string | null;
@@ -70,14 +69,6 @@ interface IOIWithUser {
   paymentMade: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
-}
-
-interface EventCheckIn {
-  id: string;
-  ioi: IOIWithUser;
-  ioiId: string;
-  checkedInBy: string;
-  createdAt: Date;
 }
 
 const app = express();
@@ -178,7 +169,6 @@ app.post(
 
                 const qrCode = await generateQR(qrHash);
 
-                // Send confirmation email with QR code
                 await sendPaymentConfirmationEmail(user as unknown as IOIWithUser, qrCode);
 
                 processedPayments.push({
@@ -460,7 +450,6 @@ app.get(
         take: 10,
       });
 
-      // City distribution
       const cityDistribution = await prisma.iOI.groupBy({
         by: ["city"],
         _count: { city: true },
@@ -468,7 +457,6 @@ app.get(
         take: 10,
       });
 
-      // Convert BigInt to String in the grade distribution
       const gradeDistribution = await prisma.iOI.groupBy({
         by: ["grade"],
         _count: { grade: true },
@@ -486,7 +474,6 @@ app.get(
         include: { user: true },
       });
 
-      // Create a response object with BigInt values converted to strings
       const response = {
         success: true,
         data: {
@@ -590,7 +577,6 @@ app.post(
         return
       }
 
-      // Check if already checked in
       const existingCheckIn = await prisma.eventCheckIn.findFirst({
         where: { ioiId: decoded.ioiId },
       });
@@ -612,7 +598,6 @@ app.post(
         return
       }
 
-      // Record check-in
       const checkIn = await prisma.eventCheckIn.create({
         data: {
           ioiId: decoded.ioiId,

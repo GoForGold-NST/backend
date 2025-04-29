@@ -9,6 +9,7 @@ import { Request, Response } from "express";
 import authMiddleware, {
   AuthenticatedRequest,
 } from "./middlewares/authMiddelware";
+import IOIMiddleware, { IOIRequest } from "./middlewares/IOIMiddleware";
 
 export const prisma = new PrismaClient();
 dotenv.config();
@@ -268,6 +269,66 @@ app.post(
       res
         .status(200)
         .json({ message: "Registered Successfully", ioiID: ioi.id });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyIOI",
+  authMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req as { userId: string };
+      const ioi = await prisma.iOI.findUnique({
+        where: { userId },
+      });
+
+      if (!ioi) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      res.status(200).json({ message: "Authorized" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyIOIPaymentNotMade",
+  authMiddleware,
+  IOIMiddleware,
+  async (req: IOIRequest, res) => {
+    try {
+      const { ioi } = req;
+      if (ioi?.paymentMade == "success") {
+        res.status(401).json({ error: "Already paid" });
+        return;
+      }
+      res.status(200).json({ message: "Not yet paid" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyIOIPaymentMade",
+  authMiddleware,
+  IOIMiddleware,
+  async (req: IOIRequest, res) => {
+    try {
+      const { ioi } = req;
+      if (ioi?.paymentMade == "success") {
+        res.status(200).json({ message: "Payment Made" });
+        return;
+      }
+      res.status(401).json({ error: "Payment not made" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Internal server error" });

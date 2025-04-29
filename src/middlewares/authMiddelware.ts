@@ -1,11 +1,12 @@
 import { verify } from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
+import { prisma } from "../index";
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
 }
 
-const authMiddleware = (
+const authMiddleware = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
@@ -18,6 +19,15 @@ const authMiddleware = (
 
   try {
     const decoded = verify(token, process.env.JWT_SECRET!) as { id: string };
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+    if (!user) {
+      res.clearCookie("token");
+      res.status(401).json({ error: "Invalid token" });
+      return;
+    }
+
     req.userId = decoded.id;
     next();
   } catch (error) {

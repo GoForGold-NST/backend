@@ -27,6 +27,7 @@ interface IOI {
   userId: string;
   fullName: string;
   email: string;
+  DOB: string;
   candidateContact?: number;
   candidateAdhaar: number;
   schoolName: string;
@@ -36,7 +37,8 @@ interface IOI {
   codeforcesRating?: number;
   codechefUsername?: string;
   codechefRating?: number;
-  participationHistory: "YES" | "NO";
+  olympiadParticipationHistory: "YES" | "NO";
+  olympiadPerformance?: string;
   CPAchievements?: string;
   chennaiParticipation: "YES" | "NO";
   volunteerInterest: "YES" | "NO";
@@ -130,9 +132,6 @@ app.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-interface payload {
-  id: string;
-}
 app.get("/verify", async (req: Request, res: Response) => {
   try {
     const token = req.cookies.token;
@@ -141,7 +140,7 @@ app.get("/verify", async (req: Request, res: Response) => {
       return;
     }
     try {
-      const decoded = verify(token, process.env.JWT_SECRET!) as payload;
+      const decoded = verify(token, process.env.JWT_SECRET!) as { id: string };
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
       });
@@ -181,13 +180,13 @@ app.post(
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
-      const fullName: string = user.fullName;
+      const { fullName, email } = user;
       if (!req.body) {
         res.status(400).json({ error: "All fields are required" });
         return;
       }
       const {
-        email,
+        DOB,
         candidateContact,
         candidateAdhaar,
         schoolName,
@@ -197,8 +196,9 @@ app.post(
         codeforcesRating,
         codechefUsername,
         codechefRating,
+        olympiadParticipationHistory,
+        olympiadPerformance,
         CPAchievements,
-        participationHistory,
         chennaiParticipation,
         volunteerInterest,
         campInterest,
@@ -210,7 +210,7 @@ app.post(
       }: IOI = req.body;
 
       if (
-        !email ||
+        !DOB ||
         !candidateContact ||
         !candidateAdhaar ||
         !schoolName ||
@@ -221,7 +221,7 @@ app.post(
         !guardianEmail ||
         !TShirtSize ||
         !campInterest ||
-        !participationHistory ||
+        !olympiadParticipationHistory ||
         !chennaiParticipation ||
         !volunteerInterest
       ) {
@@ -239,6 +239,7 @@ app.post(
       }
       const ioi = await prisma.iOI.create({
         data: {
+          DOB: new Date(DOB),
           userId,
           fullName,
           email,
@@ -251,7 +252,8 @@ app.post(
           codeforcesRating,
           codechefUsername,
           codechefRating,
-          participationHistory,
+          olympiadParticipationHistory,
+          olympiadPerformance,
           CPAchievements,
           chennaiParticipation,
           volunteerInterest,

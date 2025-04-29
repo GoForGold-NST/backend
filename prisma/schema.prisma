@@ -23,33 +23,35 @@ model Admin {
 }
 
 model IOI {
-    id                   String        @id @default(uuid())
-    user                 User          @relation(fields: [userId], references: [id])
-    userId               String        @unique
-    fullName             String
-    email                String
-    candidateContact     BigInt
-    candidateAdhaar      BigInt
-    schoolName           String
-    city                 String
-    grade                BigInt
-    codeforcesUsername   String?
-    codeforcesRating     BigInt?
-    codechefUsername     String?
-    codechefRating       BigInt?
-    participationHistory YesNo         @default(NO)
-    CPAchievements       String?
-    chennaiParticipation YesNo         @default(NO)
-    volunteerInterest    YesNo         @default(NO)
-    campInterest         String
-    guardianName         String
-    guardianContact      BigInt
-    guardianEmail        String
-    TShirtSize           String
-    allergies            String?
-    paymentMade          PaymentStatus @default(pending)
-    createdAt            DateTime      @default(now())
-    updatedAt            DateTime      @updatedAt
+    id                           String        @id @default(uuid())
+    user                         User          @relation(fields: [userId], references: [id])
+    userId                       String        @unique
+    email                        String
+    fullName                     String
+    DOB                          DateTime
+    candidateContact             BigInt
+    candidateAdhaar              BigInt
+    schoolName                   String
+    city                         String
+    grade                        BigInt
+    codeforcesUsername           String?
+    codeforcesRating             BigInt?
+    codechefUsername             String?
+    codechefRating               BigInt?
+    olympiadParticipationHistory YesNo         @default(NO)
+    olympiadPerformance          String?
+    CPAchievements               String?
+    chennaiParticipation         YesNo         @default(NO)
+    volunteerInterest            YesNo         @default(NO)
+    campInterest                 String
+    guardianName                 String
+    guardianContact              BigInt
+    guardianEmail                String
+    TShirtSize                   String
+    allergies                    String?
+    paymentMade                  PaymentStatus @default(pending)
+    createdAt                    DateTime      @default(now())
+    updatedAt                    DateTime      @updatedAt
 
     EventCheckIn EventCheckIn[]
 }

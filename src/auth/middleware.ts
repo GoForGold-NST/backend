@@ -1,6 +1,16 @@
 import jwt from "jsonwebtoken";
 
-export default function authenticateAdmin(req: { header: (arg0: string) => any; admin: any; }, res: { status: (arg0: number) => { (): any; new(): any; json: { (arg0: { message: string; }): void; new(): any; }; }; }, next: () => void) {
+export default function authenticateAdmin(
+  req: { header: (arg0: string) => any; admin: any },
+  res: {
+    status: (arg0: number) => {
+      (): any;
+      new (): any;
+      json: { (arg0: { message: string }): void; new (): any };
+    };
+  },
+  next: () => void
+) {
   const token = req.header("Authorization");
 
   if (!token) {
@@ -10,8 +20,7 @@ export default function authenticateAdmin(req: { header: (arg0: string) => any; 
   }
 
   try {
-
-    const verified = jwt.verify(token.split(" ")[1], process.env.JWT_SECRET);
+    const verified = jwt.verify(token.split(" ")[1], process.env.JWT_SECRET!);
 
     req.admin = verified;
     next();

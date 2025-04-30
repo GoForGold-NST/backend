@@ -9,7 +9,7 @@ export interface AuthenticatedRequest extends Request {
 const authMiddleware = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   const token = req.cookies?.token;
   if (!token) {
@@ -18,7 +18,9 @@ const authMiddleware = async (
   }
 
   try {
-    const decoded = verify(token, process.env.JWT_SECRET!) as { id: string };
+    const decoded = verify(token, process.env.JWT_SECRET! || "123123") as {
+      id: string;
+    };
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
     });

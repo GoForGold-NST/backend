@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import express, { Request, Response, NextFunction } from "express";
-import { prisma } from '../index'
+import { prisma } from "../index";
 
 interface AuthenticatedRequest extends Request {
   admin?: {
@@ -22,7 +22,7 @@ export const authenticateAdmin = async (
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "123123") as {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET! || "123123") as {
       id: string;
       email: string;
     };

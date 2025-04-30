@@ -27,7 +27,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND,
     credentials: true,
-  })
+  }),
 );
 
 interface IOI {
@@ -72,7 +72,7 @@ interface AdminAuthenticatedRequest extends Request {
     id: string;
     email: string;
   };
-  //@ts-ignore
+  //@ts-expect-error Type error, safe to ignore
   file?: Express.Multer.File;
 }
 
@@ -120,7 +120,7 @@ const upload = multer({ dest: "uploads/" });
 const createTransporter = () => {
   if (!process.env.SMTP_HOST) {
     console.warn(
-      "SMTP configuration not set - email functionality will be disabled"
+      "SMTP configuration not set - email functionality will be disabled",
     );
     return null;
   }
@@ -175,7 +175,7 @@ app.post("/register", async (req: Request, res: Response) => {
       process.env.JWT_SECRET! || "123123",
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     res.cookie("token", jsonWebToken, {
@@ -215,7 +215,7 @@ app.post("/login", async (req: Request, res: Response) => {
       process.env.JWT_SECRET! || "123123",
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     res.cookie("token", jsonWebToken, {
@@ -373,7 +373,7 @@ app.post(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -395,7 +395,7 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -414,7 +414,7 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -433,14 +433,14 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 // Admin routes
 const authenticateAdmin = async (
   req: AdminAuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -530,14 +530,14 @@ app.post(
                     email: user.email,
                   },
                   process.env.JWT_SECRET! || "123123",
-                  { expiresIn: "30d" }
+                  { expiresIn: "30d" },
                 );
 
                 const qrCode = await generateQR(qrHash);
 
                 await sendPaymentConfirmationEmail(
                   user as unknown as IOIWithUser,
-                  qrCode
+                  qrCode,
                 );
 
                 processedPayments.push({
@@ -559,7 +559,7 @@ app.post(
             res.status(200).json({
               success: true,
               processed: processedPayments.filter(
-                (p) => p.status === "confirmed"
+                (p) => p.status === "confirmed",
               ).length,
               failed: processedPayments.filter((p) => p.status === "failed")
                 .length,
@@ -575,7 +575,7 @@ app.post(
       console.error("Error handling CSV upload:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.post(
@@ -654,12 +654,12 @@ app.post(
       console.error("Error handling CSV upload:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 const sendPaymentConfirmationEmail = async (
   user: IOIWithUser,
-  qrCode: string
+  qrCode: string,
 ) => {
   try {
     const transporter = createTransporter();
@@ -805,7 +805,7 @@ const sendPaymentReminderEmail = async (user: IOIWithUser) => {
 app.get(
   "/admin/analytics/ioi",
   authenticateAdmin,
-  async (req: AdminAuthenticatedRequest, res: Response) => {
+  async (_: AdminAuthenticatedRequest, res: Response) => {
     try {
       const paymentStatusDistribution = await prisma.iOI.groupBy({
         by: ["paymentMade"],
@@ -915,7 +915,7 @@ app.get(
       console.error("Error fetching IOI analytics:", error);
       res.status(500).json({ success: false, error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.post(
@@ -930,14 +930,20 @@ app.post(
         return;
       }
 
-      let decoded: any;
+      let decoded:
+        | undefined
+        | {
+            userId: string;
+            ioiId: string;
+            email: string;
+          };
       try {
         decoded = verify(qrHash, process.env.JWT_SECRET! || "123123") as {
           userId: string;
           ioiId: string;
           email: string;
         };
-      } catch (err) {
+      } catch {
         res.status(401).json({ error: "Invalid or expired QR code" });
         return;
       }
@@ -1000,7 +1006,7 @@ app.post(
       console.error("Error verifying QR code:", error);
       res.status(500).json({ error: "Failed to verify QR code" });
     }
-  }
+  },
 );
 
 app.post("/admin/register", async (req: Request, res: Response) => {
@@ -1052,7 +1058,7 @@ app.post("/admin/login", async (req: Request, res: Response) => {
     const token = sign(
       { id: admin.id, email: admin.email },
       process.env.JWT_SECRET! || "123123",
-      { expiresIn: "1d" }
+      { expiresIn: "1d" },
     );
     res.status(200).json({ message: "Admin logged in successfully", token });
   } catch (error) {

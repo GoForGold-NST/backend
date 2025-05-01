@@ -136,6 +136,7 @@ const createTransporter = () => {
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true",
+    sameSite: "none",
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD,
@@ -152,11 +153,10 @@ const generateQR = async (text: string): Promise<string> => {
   }
 };
 
-
 // Health Check
 app.get("/", (_: Request, res: Response) => {
   res.status(200).json({ message: "Healthy!" });
-})
+});
 
 // User routes
 app.post("/register", async (req: Request, res: Response) => {
@@ -195,6 +195,7 @@ app.post("/register", async (req: Request, res: Response) => {
     res.cookie("token", jsonWebToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 Days
     });
@@ -235,6 +236,7 @@ app.post("/login", async (req: Request, res: Response) => {
     res.cookie("token", jsonWebToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 Days
     });

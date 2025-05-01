@@ -1067,6 +1067,6 @@ app.post("/admin/login", async (req: Request, res: Response) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server is running on port 3000");
+app.listen(process.env.PORT || 5261, () => {
+  console.log(`Server is running on port ${process.env.PORT || 5261}`);
 });

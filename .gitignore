@@ -2,4 +2,7 @@
 NODE_MODULES
 prisma/generated
 prisma/migrations
+dist
+dist/*
+dist
 

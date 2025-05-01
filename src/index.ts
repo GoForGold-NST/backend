@@ -20,12 +20,20 @@ import nodemailer from "nodemailer";
 export const prisma = new PrismaClient();
 dotenv.config();
 
+const allowedOrigins = [process.env.FRONTEND, process.env.ADMIN_FRONTEND];
+
 const app = Express();
 app.use(Express.json());
 app.use(cookieParser());
 app.use(
   cors({
-    origin: process.env.FRONTEND,
+    origin: function (origin, callback) {
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );

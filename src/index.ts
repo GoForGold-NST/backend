@@ -152,6 +152,12 @@ const generateQR = async (text: string): Promise<string> => {
   }
 };
 
+
+// Health Check
+app.get("/", (_: Request, res: Response) => {
+  res.status(200).json({ message: "Healthy!" });
+})
+
 // User routes
 app.post("/register", async (req: Request, res: Response) => {
   try {

@@ -23,9 +23,9 @@ model Admin {
 }
 
 model IOI {
-    id                           String        @id @default(uuid())
-    user                         User          @relation(fields: [userId], references: [id])
-    userId                       String        @unique
+    id                           String            @id @default(uuid())
+    user                         User              @relation(fields: [userId], references: [id])
+    userId                       String            @unique
     email                        String
     fullName                     String
     DOB                          DateTime
@@ -38,20 +38,20 @@ model IOI {
     codeforcesRating             BigInt?
     codechefUsername             String?
     codechefRating               BigInt?
-    olympiadParticipationHistory YesNo         @default(NO)
+    olympiadParticipationHistory YesNo             @default(NO)
     olympiadPerformance          String?
     CPAchievements               String?
-    chennaiParticipation         YesNo         @default(NO)
-    volunteerInterest            YesNo         @default(NO)
+    chennaiParticipation         YesNo             @default(NO)
+    volunteerInterest            volunteerInterest @default(NO)
     campInterest                 String
     guardianName                 String
     guardianContact              BigInt
     guardianEmail                String
     TShirtSize                   String
     allergies                    String?
-    paymentMade                  PaymentStatus @default(pending)
-    createdAt                    DateTime      @default(now())
-    updatedAt                    DateTime      @updatedAt
+    paymentMade                  PaymentStatus     @default(pending)
+    createdAt                    DateTime          @default(now())
+    updatedAt                    DateTime          @updatedAt
 
     EventCheckIn EventCheckIn[]
 }
@@ -74,4 +74,11 @@ enum YesNo {
     NO
 
     @@map("Bool")
+}
+
+enum volunteerInterest {
+    YES
+    NO
+    WILLTRYMYBEST
+    MAYBE
 }

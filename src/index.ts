@@ -1,5 +1,10 @@
 import Express, { NextFunction } from "express";
-import { PrismaClient } from "../prisma/generated/client";
+import {
+  volunteerInterest,
+  PrismaClient,
+  YesNo,
+  PaymentStatus,
+} from "../prisma/generated/client";
 import cookieParser from "cookie-parser";
 import { sign, verify } from "jsonwebtoken";
 import { hash, compare } from "bcryptjs";
@@ -56,23 +61,13 @@ interface IOI {
   olympiadPerformance?: string;
   CPAchievements?: string;
   chennaiParticipation: "YES" | "NO";
-  volunteerInterest: "YES" | "NO";
+  volunteerInterest: "YES" | "NO" | "WILLTRYMYBEST" | "MAYBE";
   campInterest: string;
   guardianName: string;
   guardianContact: number;
   guardianEmail: string;
   TShirtSize: string;
   allergies?: string;
-}
-
-enum PaymentStatus {
-  pending = "pending",
-  success = "success",
-}
-
-enum YesNo {
-  YES = "YES",
-  NO = "NO",
 }
 
 interface AdminAuthenticatedRequest extends Request {
@@ -111,7 +106,7 @@ interface IOIWithUser {
   olympiadParticipationHistory: YesNo;
   CPAchievements: string | null;
   chennaiParticipation: YesNo;
-  volunteerInterest: YesNo;
+  volunteerInterest: volunteerInterest;
   campInterest: string;
   guardianName: string;
   guardianContact: bigint;
@@ -133,9 +128,11 @@ const createTransporter = () => {
     return null;
   }
   return nodemailer.createTransport({
+    //@ts-expect-error Type error, safe to ignore
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true",
+    sameSite: "lax",
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD,
@@ -194,7 +191,7 @@ app.post("/register", async (req: Request, res: Response) => {
     res.cookie("token", jsonWebToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 Days
     });
@@ -235,7 +232,7 @@ app.post("/login", async (req: Request, res: Response) => {
     res.cookie("token", jsonWebToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 Days
     });

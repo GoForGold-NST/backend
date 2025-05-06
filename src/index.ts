@@ -1048,33 +1048,6 @@ app.post(
   }
 );
 
-app.post("/admin/register", async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-
-  try {
-    const adminExists = await prisma.admin.findFirst({
-      where: { email },
-    });
-
-    if (adminExists) {
-      res.status(400).json({ message: "Admin already exists" });
-      return;
-    }
-
-    const hashedPassword = await hash(password, 10);
-    const newAdmin = await prisma.admin.create({
-      data: { email, password: hashedPassword },
-    });
-
-    res
-      .status(201)
-      .json({ message: "Admin registered successfully", admin: newAdmin });
-  } catch (error) {
-    console.error("Error registering admin:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
 app.post("/admin/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
 

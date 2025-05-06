@@ -158,7 +158,6 @@ app.get("/", (_: Request, res: Response) => {
 app.post("/register", async (req: Request, res: Response) => {
   try {
     const { name, email, password } = req.body;
-    console.log(name, email, password);
     res.clearCookie("token");
     if (!name || !email || !password) {
       res.status(400).json({ error: "All fields are required" });
@@ -386,6 +385,32 @@ app.post(
       res
         .status(200)
         .json({ message: "Registered Successfully", ioiID: ioi.id });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyIOINotRegistered",
+  authMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req as { userId: string };
+      const ioi = await prisma.iOI.findUnique({
+        where: { userId },
+      });
+
+      if (ioi) {
+        if (ioi.paymentMade == "pending") {
+          res.status(409).json({ error: "Already registered" });
+        } else {
+          res.status(409).json({ error: "Already paid" });
+        }
+        return;
+      }
+      res.status(200).json({ message: "Not registered" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Internal server error" });

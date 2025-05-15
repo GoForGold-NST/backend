@@ -572,7 +572,7 @@ app.post(
                     email: user.email,
                   },
                   process.env.JWT_SECRET! || "123123",
-                  { expiresIn: "30d" }
+                  { expiresIn: "365d" }
                 );
 
                 const qrCode = await generateQR(qrHash);
@@ -1070,7 +1070,7 @@ app.post("/admin/login", async (req: Request, res: Response) => {
     const token = sign(
       { id: admin.id, email: admin.email },
       process.env.JWT_SECRET! || "123123",
-      { expiresIn: "1d" }
+      { expiresIn: "365d" }
     );
     res.status(200).json({ message: "Admin logged in successfully", token });
   } catch (error) {

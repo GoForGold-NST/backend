@@ -1079,6 +1079,76 @@ app.post("/admin/login", async (req: Request, res: Response) => {
   }
 });
 
+app.get("/admin/registrations/export", async (req: Request, res: Response) => {
+  try {
+    const registrations = await prisma.iOI.findMany({
+      include: {
+        user: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    const csvData = registrations.map((reg) => ({
+      id: reg.id,
+      fullName: reg.fullName,
+      email: reg.email,
+      DOB: reg.DOB.toISOString().split("T")[0],
+      candidateContact: reg.candidateContact.toString(),
+      candidateAdhaar: reg.candidateAdhaar?.toString() || "",
+      schoolName: reg.schoolName,
+      city: reg.city,
+      grade: reg.grade.toString(),
+      codeforcesUsername: reg.codeforcesUsername || "",
+      codeforcesRating: reg.codeforcesRating?.toString() || "",
+      codechefUsername: reg.codechefUsername || "",
+      codechefRating: reg.codechefRating?.toString() || "",
+      olympiadParticipationHistory: reg.olympiadParticipationHistory,
+      olympiadPerformance: reg.olympiadPerformance || "",
+      CPAchievements: reg.CPAchievements || "",
+      chennaiParticipation: reg.chennaiParticipation,
+      volunteerInterest: reg.volunteerInterest,
+      campInterest: reg.campInterest,
+      guardianName: reg.guardianName,
+      guardianContact: reg.guardianContact.toString(),
+      guardianEmail: reg.guardianEmail,
+      TShirtSize: reg.TShirtSize,
+      allergies: reg.allergies || "",
+      paymentStatus: reg.paymentMade,
+      createdAt: reg.createdAt.toISOString(),
+      updatedAt: reg.updatedAt.toISOString(),
+    }));
+
+    const headers = Object.keys(csvData[0]).join(",");
+    const rows = csvData.map((row) => {
+      return Object.values(row)
+        .map((value) => {
+          if (value === null || value === undefined) {
+            return "";
+          }
+          if (typeof value === "string") {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        })
+        .join(",");
+    });
+
+    const csvContent = [headers, ...rows].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=registrations_export.csv"
+    );
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error("Export failed:", error);
+    res.status(500).json({ error: "Failed to export registrations" });
+  }
+});
+
 app.listen(process.env.PORT || 5261, () => {
   console.log(`Server is running on port ${process.env.PORT || 5261}`);
 });

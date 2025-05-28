@@ -25,7 +25,12 @@ import nodemailer from "nodemailer";
 export const prisma = new PrismaClient();
 dotenv.config();
 
-const allowedOrigins = [process.env.FRONTEND, process.env.ADMIN_FRONTEND];
+const allowedOrigins = [
+  process.env.FRONTEND,
+  process.env.FRONTEND?.replace("://", "://www."),
+  process.env.ADMIN_FRONTEND,
+  process.env.ADMIN_FRONTEND?.replace("://", "://www."),
+].filter(Boolean);
 
 const app = Express();
 app.use(Express.json());
@@ -40,7 +45,7 @@ app.use(
       }
     },
     credentials: true,
-  })
+  }),
 );
 
 interface IOI {
@@ -123,7 +128,7 @@ const upload = multer({ dest: "uploads/" });
 const createTransporter = () => {
   if (!process.env.SMTP_HOST) {
     console.warn(
-      "SMTP configuration not set - email functionality will be disabled"
+      "SMTP configuration not set - email functionality will be disabled",
     );
     return null;
   }
@@ -157,14 +162,20 @@ app.get("/", (_: Request, res: Response) => {
 // User routes
 app.post("/register", async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body as {
+      name: string;
+      email: string;
+      password: string;
+    };
     res.clearCookie("token");
     if (!name || !email || !password) {
       res.status(400).json({ error: "All fields are required" });
       return;
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
     if (existingUser) {
       res.status(409).json({ error: "User already exists" });
       return;
@@ -175,7 +186,7 @@ app.post("/register", async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: {
         fullName: name,
-        email,
+        email: email.toLowerCase(),
         password: hashedPasssword,
       },
     });
@@ -184,7 +195,7 @@ app.post("/register", async (req: Request, res: Response) => {
       process.env.JWT_SECRET! || "123123",
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     res.cookie("token", jsonWebToken, {
@@ -204,13 +215,15 @@ app.post("/register", async (req: Request, res: Response) => {
 
 app.post("/login", async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body as { email: string; password: string };
     res.clearCookie("token");
     if (!email || !password) {
       res.status(400).json({ error: "All fields are required" });
       return;
     }
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
     if (!existingUser) {
       res.status(409).json({ error: "Invalid Credentials" });
       return;
@@ -225,7 +238,7 @@ app.post("/login", async (req: Request, res: Response) => {
       process.env.JWT_SECRET! || "123123",
       {
         expiresIn: "7d",
-      }
+      },
     );
 
     res.cookie("token", jsonWebToken, {
@@ -389,7 +402,7 @@ app.post(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -415,7 +428,7 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -437,7 +450,7 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -456,7 +469,7 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.get(
@@ -475,14 +488,14 @@ app.get(
       console.error(error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 // Admin routes
 const authenticateAdmin = async (
   req: AdminAuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
@@ -572,14 +585,14 @@ app.post(
                     email: user.email,
                   },
                   process.env.JWT_SECRET! || "123123",
-                  { expiresIn: "365d" }
+                  { expiresIn: "365d" },
                 );
 
                 const qrCode = await generateQR(qrHash);
 
                 await sendPaymentConfirmationEmail(
                   user as unknown as IOIWithUser,
-                  qrCode
+                  qrCode,
                 );
 
                 processedPayments.push({
@@ -601,7 +614,7 @@ app.post(
             res.status(200).json({
               success: true,
               processed: processedPayments.filter(
-                (p) => p.status === "confirmed"
+                (p) => p.status === "confirmed",
               ).length,
               failed: processedPayments.filter((p) => p.status === "failed")
                 .length,
@@ -617,7 +630,7 @@ app.post(
       console.error("Error handling CSV upload:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.post(
@@ -696,12 +709,12 @@ app.post(
       console.error("Error handling CSV upload:", error);
       res.status(500).json({ error: "Internal server error" });
     }
-  }
+  },
 );
 
 const sendPaymentConfirmationEmail = async (
   user: IOIWithUser,
-  qrCode: string
+  qrCode: string,
 ) => {
   try {
     const transporter = createTransporter();
@@ -954,7 +967,7 @@ app.get(
       console.error("Error fetching IOI analytics:", error);
       res.status(500).json({ success: false, error: "Internal server error" });
     }
-  }
+  },
 );
 
 app.post(
@@ -1045,7 +1058,7 @@ app.post(
       console.error("Error verifying QR code:", error);
       res.status(500).json({ error: "Failed to verify QR code" });
     }
-  }
+  },
 );
 
 app.post("/admin/login", async (req: Request, res: Response) => {
@@ -1070,7 +1083,7 @@ app.post("/admin/login", async (req: Request, res: Response) => {
     const token = sign(
       { id: admin.id, email: admin.email },
       process.env.JWT_SECRET! || "123123",
-      { expiresIn: "365d" }
+      { expiresIn: "365d" },
     );
     res.status(200).json({ message: "Admin logged in successfully", token });
   } catch (error) {
@@ -1140,7 +1153,7 @@ app.get("/admin/registrations/export", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=registrations_export.csv"
+      "attachment; filename=registrations_export.csv",
     );
     res.status(200).send(csvContent);
   } catch (error) {

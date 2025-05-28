@@ -1,0 +1,40 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: self-hosted
+
+    strategy:
+      matrix:
+        node-version: [18.19.1]
+    env:
+      DATABASE_URL: ${{secrets.DATABASE_URL}}
+      JWT_SECRET: ${{secrets.JWT_SECRET}}
+      FRONTEND: ${{secrets.FRONTEND}}
+      ADMIN_FRONTEND: ${{secrets.ADMIN_FRONTEND}}
+      SMTP_HOST: ${{secrets.SMTP_HOST}}
+      SMTP_PORT: ${{secrets.SMTP_PORT}}
+      SMTP_SECURE: ${{secrets.SMTP_SECURE}}
+      SMTP_USER: ${{secrets.SMTP_USER}}
+      SMTP_PASSWORD: ${{secrets.SMTP_PASSWORD}}
+      FROM_EMAIL: ${{secrets.FROM_EMAIL}}
+      CONTACT_EMAIL: ${{secrets.CONTACT_EMAIL}}
+      PAYMENT_LINK: ${{secrets.PAYMENT_LINK}}
+      PORT: ${{secrets.PORT}}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    - run: npm ci
+    - run: npm run build --if-present
+    - name: Change Directory
+      run: cd /home/ubuntu/backend/actions-runner/_work/backend/backend
+    - run: pm2 restart 2 --update-env

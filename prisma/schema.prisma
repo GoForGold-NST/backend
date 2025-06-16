@@ -9,11 +9,12 @@ datasource db {
 }
 
 model User {
-    id       String @id @default(uuid())
-    fullName String
-    email    String @unique
-    password String
-    IOI      IOI[]
+    id        String     @id @default(uuid())
+    fullName  String
+    email     String     @unique
+    password  String
+    ICPCElite ICPCElite?
+    IOI       IOI?
 }
 
 model Admin {
@@ -24,7 +25,6 @@ model Admin {
 
 model IOI {
     id                           String            @id @default(uuid())
-    user                         User              @relation(fields: [userId], references: [id])
     userId                       String            @unique
     email                        String
     fullName                     String
@@ -52,16 +52,62 @@ model IOI {
     paymentMade                  PaymentStatus     @default(pending)
     createdAt                    DateTime          @default(now())
     updatedAt                    DateTime          @updatedAt
-
-    EventCheckIn EventCheckIn[]
+    EventCheckIn                 EventCheckIn[]
+    user                         User              @relation(fields: [userId], references: [id])
 }
 
 model EventCheckIn {
     id          String   @id @default(uuid())
-    ioi         IOI      @relation(fields: [ioiId], references: [id])
     ioiId       String
     checkedInBy String
     createdAt   DateTime @default(now())
+    ioi         IOI      @relation(fields: [ioiId], references: [id])
+}
+
+model ICPCElite {
+    id                    String        @id @default(uuid())
+    userId                String        @unique
+    fullName              String
+    email                 String
+    phone                 String
+    dateOfBirth           DateTime
+    gender                String?
+    address               String?
+    city                  String
+    state                 String?
+    pincode               String?
+    currentEducation      String
+    instituteName         String
+    graduationYear        String?
+    cgpa                  String?
+    branch                String?
+    semester              String?
+    programmingExperience String
+    favoriteLanguages     String[]
+    codingPlatforms       String[]
+    githubProfile         String?
+    linkedinProfile       String?
+    icpcParticipation     String
+    icpcRank              String?
+    codeforcesHandle      String?
+    codeforcesRating      String?
+    codechefHandle        String?
+    codechefRating        String?
+    otherCompetitions     String?
+    achievements          String?
+    expectationsFromCamp  String
+    areasOfInterest       String[]
+    teamExperience        String?
+    accommodation         String?
+    dietaryRestrictions   String?
+    emergencyContact      String
+    emergencyPhone        String
+    heardAboutCamp        String?
+    additionalInfo        String?
+    paymentStatus         PaymentStatus @default(pending)
+    createdAt             DateTime      @default(now())
+    updatedAt             DateTime      @updatedAt
+    User                  User          @relation(fields: [userId], references: [id])
 }
 
 enum PaymentStatus {

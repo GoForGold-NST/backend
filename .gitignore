@@ -1,5 +1,5 @@
 .env
-NODE_MODULES
+/node_modules
 prisma/generated
 prisma/migrations
 dist

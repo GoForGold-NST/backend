@@ -123,6 +123,49 @@ interface IOIWithUser {
   updatedAt: Date;
 }
 
+interface ICPCElite {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  gender: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  currentEducation: string;
+  instituteName: string;
+  graduationYear: string;
+  cgpa: string;
+  branch: string;
+  semester: string;
+  programmingExperience: string;
+  favoriteLanguages: string[];
+  codingPlatforms: string[];
+  githubProfile: string;
+  linkedinProfile: string;
+  icpcParticipation: string;
+  icpcRank: string;
+  codeforcesHandle: string;
+  codeforcesRating: string;
+  codechefHandle: string;
+  codechefRating: string;
+  otherCompetitions: string;
+  achievements: string;
+  expectationsFromCamp: string;
+  areasOfInterest: string[];
+  teamExperience: string;
+  accommodation: string;
+  dietaryRestrictions: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  heardAboutCamp: string;
+  additionalInfo: string;
+  paymentStatus: PaymentStatus;
+}
+
 const upload = multer({ dest: "uploads/" });
 
 const createTransporter = () => {
@@ -829,9 +872,8 @@ const sendPaymentReminderEmail = async (user: IOIWithUser) => {
             <p><strong>Grade:</strong> ${user.grade.toString()}</p>
             
             <p>To complete your registration, please make the payment at your earliest convenience.</p>
-            <a href="${
-              process.env.PAYMENT_LINK || "https://yourpaymentlink.com"
-            }" class="button">Complete Payment Now</a>
+            <a href="${process.env.PAYMENT_LINK || "https://yourpaymentlink.com"
+      }" class="button">Complete Payment Now</a>
             
             <p>If you've already made the payment, please ignore this reminder.</p>
           </div>
@@ -985,10 +1027,10 @@ app.post(
       let decoded:
         | undefined
         | {
-            userId: string;
-            ioiId: string;
-            email: string;
-          };
+          userId: string;
+          ioiId: string;
+          email: string;
+        };
       try {
         decoded = verify(qrHash, process.env.JWT_SECRET! || "123123") as {
           userId: string;
@@ -1092,7 +1134,7 @@ app.post("/admin/login", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/admin/registrations/export", async (req: Request, res: Response) => {
+app.get("/admin/registrations/export", async (_: Request, res: Response) => {
   try {
     const registrations = await prisma.iOI.findMany({
       include: {
@@ -1161,6 +1203,188 @@ app.get("/admin/registrations/export", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to export registrations" });
   }
 });
+
+// ICPCElite routes
+app.post(
+  "/registerICPCElite",
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { userId } = req as { userId: string };
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!userId || !user) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      // Extract required fields from form data
+      const {
+        phone,
+        dateOfBirth,
+        gender,
+        address,
+        city,
+        state,
+        pincode,
+        currentEducation,
+        instituteName,
+        graduationYear,
+        cgpa,
+        branch,
+        semester,
+        programmingExperience,
+        favoriteLanguages,
+        codingPlatforms,
+        githubProfile,
+        linkedinProfile,
+        icpcParticipation,
+        icpcRank,
+        codeforcesHandle,
+        codeforcesRating,
+        codechefHandle,
+        codechefRating,
+        otherCompetitions,
+        achievements,
+        expectationsFromCamp,
+        areasOfInterest,
+        teamExperience,
+        accommodation,
+        dietaryRestrictions,
+        emergencyContact,
+        emergencyPhone,
+        heardAboutCamp,
+        additionalInfo,
+      }: ICPCElite = req.body;
+
+      // Validate required fields
+      if (
+        !phone ||
+        !dateOfBirth ||
+        !city ||
+        !currentEducation ||
+        !instituteName ||
+        !programmingExperience ||
+        !icpcParticipation ||
+        !expectationsFromCamp ||
+        !emergencyContact ||
+        !emergencyPhone
+      ) {
+        res.status(400).json({ error: "All required fields must be filled" });
+        return;
+      }
+
+      // Check for existing registration
+      const existingRegistration = await prisma.iCPCElite.findUnique({
+        where: { userId },
+      });
+
+      if (existingRegistration) {
+        res.status(409).json({ error: "Already registered" });
+        return;
+      }
+
+      // Create new registration using user's existing fullName and email
+      const registration = await prisma.iCPCElite.create({
+        data: {
+          userId,
+          fullName: user.fullName, // Use existing fullName
+          email: user.email, // Use existing email
+          phone,
+          dateOfBirth: new Date(dateOfBirth),
+          gender,
+          address,
+          city,
+          state,
+          pincode,
+          currentEducation,
+          instituteName,
+          graduationYear,
+          cgpa,
+          branch,
+          semester,
+          programmingExperience,
+          favoriteLanguages,
+          codingPlatforms,
+          githubProfile,
+          linkedinProfile,
+          icpcParticipation,
+          icpcRank,
+          codeforcesHandle,
+          codeforcesRating,
+          codechefHandle,
+          codechefRating,
+          otherCompetitions,
+          achievements,
+          expectationsFromCamp,
+          areasOfInterest,
+          teamExperience,
+          accommodation,
+          dietaryRestrictions,
+          emergencyContact,
+          emergencyPhone,
+          heardAboutCamp,
+          additionalInfo,
+          paymentStatus: "pending",
+        },
+      });
+
+      res.status(200).json({
+        message: "Registration successful",
+        registrationId: registration.id,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyICPCEliteRegistration",
+  authMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req as { userId: string };
+      const registration = await prisma.iCPCElite.findUnique({
+        where: { userId },
+      });
+
+      if (!registration) {
+        res.status(401).json({ error: "Not registered" });
+        return;
+      }
+      res.status(200).json({ message: "Registration complete" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
+
+app.get(
+  "/verifyICPCEliteNotRegistered",
+  authMiddleware,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId } = req as { userId: string };
+      const registration = await prisma.iCPCElite.findUnique({
+        where: { userId },
+      });
+
+      if (registration) {
+        res.status(409).json({ error: "Already registered" });
+        return;
+      }
+      res.status(200).json({ message: "Not registered" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
 
 app.listen(process.env.PORT || 5261, () => {
   console.log(`Server is running on port ${process.env.PORT || 5261}`);

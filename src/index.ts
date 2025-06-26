@@ -1386,6 +1386,19 @@ app.get(
   },
 );
 
+app.get("/admin/icpc-elite-registrations",
+  async (_: Request, res: Response) => {
+    try {
+      const regs = await prisma.iCPCElite.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+      res.json(regs);
+    } catch (error) {
+      console.error("Error fetching ICPC Elite registrations:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
 app.listen(process.env.PORT || 5261, () => {
   console.log(`Server is running on port ${process.env.PORT || 5261}`);
 });

@@ -1399,6 +1399,85 @@ app.get("/admin/icpc-elite-registrations",
     }
   });
 
+app.get("/admin/icpc-elite/export", async (_: Request, res: Response) => {
+  try {
+    const registrations = await prisma.iCPCElite.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (registrations.length === 0) {
+      res.status(200).send("No registrations found");
+      return;
+    }
+
+    const csvData = registrations.map((reg) => ({
+      fullName: reg.fullName,
+      email: reg.email,
+      phone: reg.phone,
+      dateOfBirth: reg.dateOfBirth.toISOString().split("T")[0],
+      gender: reg.gender || "",
+      address: reg.address || "",
+      city: reg.city,
+      state: reg.state || "",
+      pincode: reg.pincode || "",
+      currentEducation: reg.currentEducation,
+      instituteName: reg.instituteName,
+      graduationYear: reg.graduationYear || "",
+      cgpa: reg.cgpa || "",
+      branch: reg.branch || "",
+      semester: reg.semester || "",
+      programmingExperience: reg.programmingExperience,
+      favoriteLanguages: reg.favoriteLanguages ? reg.favoriteLanguages.join(", ") : "",
+      codingPlatforms: reg.codingPlatforms ? reg.codingPlatforms.join(", ") : "",
+      githubProfile: reg.githubProfile || "",
+      linkedinProfile: reg.linkedinProfile || "",
+      icpcParticipation: reg.icpcParticipation,
+      icpcRank: reg.icpcRank || "",
+      codeforcesHandle: reg.codeforcesHandle || "",
+      codeforcesRating: reg.codeforcesRating || "",
+      codechefHandle: reg.codechefHandle || "",
+      codechefRating: reg.codechefRating || "",
+      otherCompetitions: reg.otherCompetitions || "",
+      achievements: reg.achievements || "",
+      expectationsFromCamp: reg.expectationsFromCamp,
+      areasOfInterest: reg.areasOfInterest ? reg.areasOfInterest.join(", ") : "",
+      teamExperience: reg.teamExperience || "",
+      accommodation: reg.accommodation || "",
+      dietaryRestrictions: reg.dietaryRestrictions || "",
+      emergencyContact: reg.emergencyContact,
+      emergencyPhone: reg.emergencyPhone,
+      heardAboutCamp: reg.heardAboutCamp || "",
+      additionalInfo: reg.additionalInfo || "",
+      paymentStatus: reg.paymentStatus,
+      createdAt: reg.createdAt.toISOString(),
+      updatedAt: reg.updatedAt.toISOString(),
+    }));
+
+    const headers = Object.keys(csvData[0]).join(",");
+    const rows = csvData.map((row) =>
+      Object.values(row)
+        .map((value) => {
+          if (value === null || value === undefined) return "";
+          if (typeof value === "string") return `"${value.replace(/"/g, '""')}"`;
+          return value;
+        })
+        .join(",")
+    );
+
+    const csvContent = [headers, ...rows].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=icpc_elite_registrations.csv"
+    );
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error("ICPC Elite export failed:", error);
+    res.status(500).json({ error: "Failed to export ICPC Elite registrations" });
+  }
+});
+
 app.listen(process.env.PORT || 5261, () => {
   console.log(`Server is running on port ${process.env.PORT || 5261}`);
 });
